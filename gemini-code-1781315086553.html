@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Receipt & Invoice Workspace Studio</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ReceiptStudio">
+    
+    <script>
+        const manifest = {
+            "short_name": "ReceiptStudio",
+            "name": "Professional Receipt & Invoice Studio",
+            "icons": [{
+                "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='%232563eb'><rect width='100' height='100' rx='20'/><text x='50' y='65' font-family='sans-serif' font-size='40' font-weight='bold' fill='white' text-anchor='middle'>R</text></svg>",
+                "sizes": "512x512",
+                "type": "image/svg+xml",
+                "purpose": "any maskable"
+            }],
+            "start_url": ".",
+            "background_color": "#f1f5f9",
+            "theme_color": "#0f172a",
+            "display": "standalone",
+            "orientation": "portrait"
+        };
+        const stringManifest = JSON.stringify(manifest);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestURL;
+        document.head.appendChild(link);
+    </script>
+
+    <style>
+        :root {
+            --primary: #0f172a;
+            --accent: #2563eb;
+            --bg: #f1f5f9;
+            --panel: #ffffff;
+            --border: #cbd5e1;
+            --text: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            -webkit-user-select: none; /* Prevents accidental text selections during drag */
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1400px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Responsive Breakpoints: Flex column on mobile, Row on Desktop */
+        @media (max-width: 1024px) {
+            .container { flex-direction: column; padding-bottom: 60px; }
+            body { padding: 5px; }
+        }
+
+        /* Controls Configuration Block */
+        .panel {
+            flex: 1;
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            max-height: 90vh;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        /* Custom Scrollbars for Desktop viewports */
+        .panel::-webkit-scrollbar { width: 6px; }
+        .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        h2 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; font-size: 1.3rem;}
+        h3 { font-size: 0.95rem; margin-bottom: 8px; color: var(--accent); }
+
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.8rem; }
+        input[type="text"], input[type="number"], select, textarea {
+            width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; font-size: 0.9rem; -webkit-appearance: none;
+        }
+        textarea { resize: vertical; height: 50px; }
+
+        /* Multi-Row Billing Component Layout */
+        .item-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .item-desc { flex: 3; }
+        .item-amt { flex: 1.2; }
+        .btn-remove { background: #ef4444; color: white; border: none; padding: 10px 14px; border-radius: 6px; cursor: pointer; font-weight: bold;}
+        .btn-add { background: #10b981; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: bold; }
+
+        /* Interactive Drawing Pad Setup */
+        .canvas-container { border: 1px solid var(--border); background: #fff; border-radius: 6px; touch-action: none; position: relative; }
+        .btn-clear { background: #64748b; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; margin-top: 4px; }
+
+        /* Workspace Core Layout Layouts */
+        .preview-panel {
+            flex: 1.2;
+            background: var(--panel);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .instructions {
+            background: #eff6ff; color: #1e40af; padding: 10px; border-radius: 6px; font-size: 0.8rem; margin-bottom: 12px; width: 100%; box-sizing: border-box;
+        }
+
+        /* Scaled viewport container logic: Prevents document overflow on small phones */
+        .document-scroll-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+            background: #cbd5e1;
+            padding: 15px 0;
+            border-radius: 8px;
+        }
+
+        /* Standardized A4 aspect ratio document canvas */
+        .document-view {
+            width: 595px; 
+            min-height: 821px;
+            background: white;
+            padding: 40px;
+            box-sizing: border-box;
+            position: relative; 
+            overflow: hidden;
+            flex-shrink: 0; /* Keeps exact width baseline sizes intact on touch browsers */
+        }
+
+        .doc-top-grid { display: flex; justify-content: space-between; margin-bottom: 35px; min-height: 100px; position: relative; z-index: 5; }
+        .doc-title-area { text-align: right; width: 65%; }
+        .doc-title-input { font-size: 1.5rem; font-weight: 800; color: #0f172a; text-align: right; border: none; padding: 0; background: transparent; width: 100%; }
+        .doc-title-input:focus { border-bottom: 1px dashed var(--accent); outline: none; }
+
+        .details-block { margin-top: 15px; margin-bottom: 20px; font-size: 0.85rem; line-height: 1.5; position: relative; z-index: 5;}
+        
+        .receipt-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.85rem; position: relative; z-index: 5;}
+        .receipt-table th { background: #f8fafc; border-bottom: 2px solid #0f172a; text-align: left; padding: 8px; font-weight: 700; }
+        .receipt-table td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
+        .total-row td { border-top: 2px solid #0f172a; font-weight: bold; font-size: 0.95rem; }
+
+        /* CROSS-DEVICE INTERACTIVE GESTURE OBJECTS */
+        .draggable-element {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+            touch-action: none; /* Disables browser scrolling mechanics during dragging sequences */
+            border: 1px dashed transparent;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+        .draggable-element:hover {
+            border: 1px dashed var(--accent);
+            background: rgba(37, 99, 235, 0.03);
+        }
+        .draggable-element img { width: 100%; height: 100%; display: block; pointer-events: none; object-fit: contain; }
+
+        /* Defaults Positioning profiles */
+        #logo-drag-container { width: 100px; height: 100px; top: 40px; left: 40px; z-index: 10; display: flex; align-items: center; justify-content: center; }
+        .logo-placeholder-text { font-size: 0.7rem; color: #94a3b8; border: 1px dashed var(--border); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        #chop-drag-container { width: 120px; height: 120px; bottom: 80px; right: 160px; z-index: 99; mix-blend-mode: multiply; opacity: 0.9; }
+        #sig-drag-container { width: 130px; height: 65px; bottom: 90px; right: 40px; z-index: 98; }
+
+        .resize-handle { width: 12px; height: 12px; background: var(--accent); position: absolute; right: 0; bottom: 0; cursor: se-resize; display: none; z-index: 100; border-radius: 50%; }
+        .draggable-element:hover .resize-handle { display: block; }
+
+        .action-btn {
+            background: var(--accent); color: white; border: none; padding: 14px 28px; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px;
+        }
+
+        /* PRINT CONFIGURATION RUNTIMES */
+        @media print {
+            body { padding: 0; background: white; }
+            .container { gap: 0; }
+            .panel, .instructions, .action-btn, h2, .resize-handle, .logo-placeholder-text, .btn-remove, .document-scroll-wrapper { display: none !important; }
+            .preview-panel { padding: 0; background: none; box-shadow: none; display: block; }
+            .document-view { border: none; box-shadow: none; padding: 0; width: 100%; position: absolute; left: 0; top: 0; }
+            .draggable-element { border: none !important; background: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="panel">
+        <h2>Document Engine Configuration</h2>
+        
+        <div class="form-group">
+            <label for="doc-type">Pre-made Document Templates (100 Options)</label>
+            <select id="doc-type" onchange="applyTemplateSelection()"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="custom-title-input">Custom Document Title / Heading</label>
+            <input type="text" id="custom-title-input" value="OFFICIAL RECEIPT" oninput="syncTitleHeading()">
+        </div>
+
+        <div class="form-group">
+            <label for="rec-number">Receipt / Invoice Number</label>
+            <input type="text" id="rec-number" value="TX-2026-8892" oninput="updateLivePreview()">
+        </div>
+
+        <div class="form-group">
+            <label for="company-details">Your Company Header Information</label>
+            <textarea id="company-details" oninput="updateLivePreview()">Common Tower Technologies Sdn Bhd&#10;Kota Kinabalu, Sabah, Malaysia</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="client-details">Client Bill To / Received From Details</label>
+            <textarea id="client-details" placeholder="Client Name, Corporate Address, Contact Info" oninput="updateLivePreview()"></textarea>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="margin: 0;">Purchases & Service Descriptions</h3>
+            <button class="btn-add" onclick="addItemRow()">+ Add Row</button>
+        </div>
+        <div id="items-container">
+            <div class="item-row">
+                <input type="text" class="item-desc" placeholder="Service description parameters" value="Site Acquisition Feasibility Study" oninput="updateLivePreview()">
+                <input type="number" class="item-amt" placeholder="0.00" value="4500.00" oninput="updateLivePreview()">
+                <button class="btn-remove" onclick="removeItemRow(this)">×</button>
+            </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
+
+        <h3>Visual Corporate Assets</h3>
+        <div class="form-group">
+            <label for="upload-logo">Company Logo (Upload File or Device Camera)</label>
+            <input type="file" id="upload-logo" accept="image/*" onchange="handleLogoUpload(event)">
+        </div>
+
+        <div class="form-group">
+            <label>Draw Signature Layer (Smartpen/Finger Native Control)</label>
+            <div class="canvas-container">
+                <canvas id="sig-pad" style="width:100%; height:110px; display:block;"></canvas>
+            </div>
+            <button class="btn-clear" onclick="clearSignatureCanvas()">Reset Hand-drawn Line</button>
+        </div>
+
+        <div class="form-group">
+            <label for="upload-sig">Or Upload Signature Image File</label>
+            <input type="file" id="upload-sig" accept="image/*" onchange="handleSignatureUpload(event)">
+        </div>
+
+        <div class="form-group">
+            <label for="upload-chop">Upload Company Stamp / Chop</label>
+            <input type="file" id="upload-chop" accept="image/*" onchange="handleChopUpload(event)">
+        </div>
+    </div>
+
+    <div class="preview-panel">
+        <h2>Interactive Workspace Studio</h2>
+        <div class="instructions">
+            📱 <b>Mobile/Desktop Note:</b> Drag elements freely across the sheet canvas. On smaller mobile phone screens, simply swipe or scroll horizontally inside the gray workspace map to access different edges of the document.
+        </div>
+        
+        <div class="document-scroll-wrapper">
+            <div class="document-view" id="invoice-workspace">
+                
+                <div class="doc-top-grid">
+                    <div style="width: 110px;"></div> <div class="doc-title-area">
+                        <input type="text" id="lbl-doc-type" class="doc-title-input" value="OFFICIAL RECEIPT" oninput="syncTitleFromLabel()">
+                        <div style="margin-top: 5px; font-weight: bold; font-size:0.9rem;">No: <span id="lbl-rec-num" style="color: #ef4444;">---</span></div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">Date: <span id="lbl-date">13/06/2026</span></div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 30px;" class="details-block">
+                    <div style="flex: 1;">
+                        <strong style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Issued From:</strong>
+                        <div id="lbl-comp-info" style="white-space: pre-line; font-weight: bold;"></div>
+                    </div>
+                    <div style="flex: 1;">
+                        <strong style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Transaction To:</strong>
+                        <div id="lbl-client-info" style="white-space: pre-line;"></div>
+                    </div>
+                </div>
+
+                <table class="receipt-table">
+                    <thead>
+                        <tr>
+                            <th>Item Description & Purchase Breakdown</th>
+                            <th style="text-align: right; width: 130px;">Amount ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-bill-rows"></tbody>
+                    <tr class="total-row">
+                        <td>Aggregated Total Due</td>
+                        <td style="text-align: right;" id="lbl-grand-total">$0.00</td>
+                    </tr>
+                </table>
+
+                <div style="margin-top: 130px; display: flex; justify-content: space-between; font-size: 0.8rem; position: relative; z-index: 5;">
+                    <div><p style="color: #94a3b8;">System generated financial accounting document.</p></div>
+                    <div style="text-align: center; width: 170px;">
+                        <div style="border-top: 1px dashed #000; margin-top: 45px; padding-top: 4px; font-weight: bold;">Authorized Representative</div>
+                    </div>
+                </div>
+
+                <div class="draggable-element" id="logo-drag-container">
+                    <div class="logo-placeholder-text" id="logo-prompt">Upload Logo</div>
+                    <img id="layer-logo" src="" style="display: none;">
+                    <div class="resize-handle"></div>
+                </div>
+
+                <div class="draggable-element" id="sig-drag-container">
+                    <img id="layer-sig" src="" style="display: none;">
+                    <div class="resize-handle"></div>
+                </div>
+
+                <div class="draggable-element" id="chop-drag-container">
+                    <img id="layer-chop" src="" style="display: none;">
+                    <div class="resize-handle"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <button class="action-btn" onclick="window.print()">Print Receipt / Save PDF</button>
+    </div>
+</div>
+
+<script>
+    // System Style Option Matrix Array
+    const typeSelect = document.getElementById('doc-type');
+    const terms = ["Receipt", "Tax Invoice", "Payment Slip", "Proforma Invoice", "Credit Note", "Debit Voucher"];
+    const tags = ["Telecom", "Engineering", "General Business", "Logistics", "Project Management", "Technical Services", "Legal & Land"];
+    
+    for (let i = 1; i <= 100; i++) {
+        let name = `${tags[i % tags.length]} ${terms[i % terms.length]}`;
+        let opt = document.createElement('option');
+        opt.value = name.toUpperCase();
+        opt.textContent = `[Style ${i}] ${name}`;
+        typeSelect.appendChild(opt);
+    }
+
+    // Header Sync Two Way Architecture
+    function syncTitleHeading() { document.getElementById('lbl-doc-type').value = document.getElementById('custom-title-input').value; }
+    function syncTitleFromLabel() { document.getElementById('custom-title-input').value = document.getElementById('lbl-doc-type').value; }
+    function applyTemplateSelection() { document.getElementById('custom-title-input').value = typeSelect.value; syncTitleHeading(); }
+
+    // Table Multi Row Accounting Config
+    function addItemRow() {
+        const container = document.getElementById('items-container');
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.innerHTML = `
+            <input type="text" class="item-desc" placeholder="Service description parameters" oninput="updateLivePreview()">
+            <input type="number" class="item-amt" placeholder="0.00" oninput="updateLivePreview()">
+            <button class="btn-remove" onclick="removeItemRow(this)">×</button>
+        `;
+        container.appendChild(row);
+        updateLivePreview();
+    }
+    function removeItemRow(btn) { btn.parentElement.remove(); updateLivePreview(); }
+
+    // Live Math Aggregations 
+    function updateLivePreview() {
+        document.getElementById('lbl-rec-num').textContent = document.getElementById('rec-number').value || '---';
+        document.getElementById('lbl-comp-info').textContent = document.getElementById('company-details').value;
+        document.getElementById('lbl-client-info').textContent = document.getElementById('client-details').value || 'N/A';
+
+        const rows = document.querySelectorAll('#items-container .item-row');
+        const tableBody = document.getElementById('table-bill-rows');
+        tableBody.innerHTML = '';
+        
+        let aggregateTotal = 0;
+        rows.forEach(row => {
+            const desc = row.querySelector('.item-desc').value || 'Line item specification entry parameters';
+            const amtVal = parseFloat(row.querySelector('.item-amt').value) || 0;
+            aggregateTotal += amtVal;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${desc}</td><td style="text-align: right;">$${amtVal.toFixed(2)}</td>`;
+            tableBody.appendChild(tr);
+        });
+        document.getElementById('lbl-grand-total').textContent = `$${aggregateTotal.toFixed(2)}`;
+    }
+
+    // Standardized Drawing Pad Controller Core
+    const canvas = document.getElementById('sig-pad');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+
+    // Responsive High-Definition Line Scaling Setup
+    function resizeCanvasTarget() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = 110;
+        ctx.strokeStyle = "#1e3a8a"; 
+        ctx.lineWidth = 2.5;
+    }
+    window.addEventListener('resize', resizeCanvasTarget);
+    setTimeout(resizeCanvasTarget, 300);
+
+    function getCanvasCoordinates(e) {
+        const r = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - r.left, y: clientY - r.top };
+    }
+    function startDrawTrack(e) {
+        isDrawing = true;
+        const p = getCanvasCoordinates(e);
+        ctx.beginPath(); ctx.moveTo(p.x, p.y);
+        if (e.touches) e.preventDefault();
+    }
+    function drawTrack(e) {
+        if (!isDrawing) return;
+        const p = getCanvasCoordinates(e);
+        ctx.lineTo(p.x, p.y); ctx.stroke();
+        if (e.touches) e.preventDefault();
+        syncCanvasToDraggable();
+    }
+    function syncCanvasToDraggable() {
+        const outImg = document.getElementById('layer-sig');
+        outImg.src = canvas.toDataURL();
+        outImg.style.display = 'block';
+    }
+    function clearSignatureCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('layer-sig').style.display = 'none';
+        document.getElementById('layer-sig').src = '';
+    }
+
+    canvas.addEventListener('mousedown', startDrawTrack);
+    canvas.addEventListener('mousemove', drawTrack);
+    window.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('touchstart', startDrawTrack, {passive: false});
+    canvas.addEventListener('touchmove', drawTrack, {passive: false});
+    window.addEventListener('touchend', () => isDrawing = false);
+
+    // Asset Loader Core Channels
+    function handleLogoUpload(event) {
+        const file = event.target.files[0]; if(!file) return;
+        const r = new FileReader(); r.onload = function(e) {
+            document.getElementById(`layer-logo`).src = e.target.result;
+            document.getElementById(`layer-logo`).style.display = 'block';
+            if(document.getElementById('logo-prompt')) document.getElementById('logo-prompt').style.display = 'none';
+        }; r.readAsDataURL(file);
+    }
+    function handleSignatureUpload(event) {
+        const file = event.target.files[0]; if(!file) return;
+        const r = new FileReader(); r.onload = function(e) {
+            document.getElementById(`layer-sig`).src = e.target.result;
+            document.getElementById(`layer-sig`).style.display = 'block';
+        }; r.readAsDataURL(file);
+    }
+    function handleChopUpload(event) {
+        const file = event.target.files[0]; if(!file) return;
+        const r = new FileReader(); r.onload = function(e) {
+            document.getElementById(`layer-chop`).src = e.target.result;
+            document.getElementById(`layer-chop`).style.display = 'block';
+        }; r.readAsDataURL(file);
+    }
+
+    // ROBUST CROSS-PLATFORM DRAG-AND-RESIZE ENGINE (Supports Touch Event Matrices)
+    function applyInteractionEngine(elementId) {
+        const el = document.getElementById(elementId);
+        const handle = el.querySelector('.resize-handle');
+        let activeAction = null; 
+        let startX, startY, startW, startH, startLeft, startTop;
+
+        function onPointerDown(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            if (e.target === handle) {
+                activeAction = 'resize';
+                startW = parseInt(document.defaultView.getComputedStyle(el).width, 10);
+                startH = parseInt(document.defaultView.getComputedStyle(el).height, 10);
+            } else {
+                activeAction = 'drag';
+                startLeft = el.offsetLeft;
+                startTop = el.offsetTop;
+            }
+            
+            startX = clientX;
+            startY = clientY;
+            
+            document.addEventListener('mousemove', onPointerMove, { passive: false });
+            document.addEventListener('mouseup', onPointerUp);
+            document.addEventListener('touchmove', onPointerMove, { passive: false });
+            document.addEventListener('touchend', onPointerUp);
+            
+            if(e.touches) e.preventDefault();
+        }
+
+        function onPointerMove(e) {
+            if (!activeAction) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+
+            if (activeAction === 'drag') {
+                el.style.left = (startLeft + dx) + 'px';
+                el.style.top = (startTop + dy) + 'px';
+            } else if (activeAction === 'resize') {
+                el.style.width = (startW + dx) + 'px';
+                el.style.height = (startH + dy) + 'px';
+            }
+            e.preventDefault();
+        }
+
+        function onPointerUp() {
+            activeAction = null;
+            document.removeEventListener('mousemove', onPointerMove);
+            document.removeEventListener('mouseup', onPointerUp);
+            document.removeEventListener('touchmove', onPointerMove);
+            document.removeEventListener('touchend', onPointerUp);
+        }
+
+        el.addEventListener('mousedown', onPointerDown);
+        el.addEventListener('touchstart', onPointerDown, { passive: false });
+    }
+
+    applyInteractionEngine('logo-drag-container');
+    applyInteractionEngine('sig-drag-container');
+    applyInteractionEngine('chop-drag-container');
+
+    const d = new Date();
+    document.getElementById('lbl-date').textContent = d.toLocaleDateString('en-GB');
+    updateLivePreview();
+</script>
+
+</body>
+</html>
